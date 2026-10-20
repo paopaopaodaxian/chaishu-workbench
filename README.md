@@ -99,7 +99,9 @@ macos/               macOS 应用的启动器、图标和 Info.plist
 scripts/             打包脚本
 ```
 
-打包 macOS 应用：`scripts/build_macos_app.sh 0.1.1`。推送 `v*` 标签会自动在 GitHub Releases 发布。
+打包 macOS 应用：`scripts/build_macos_app.sh 0.1.1`。
+
+发布新版本：修改 `VERSION` 文件里的版本号并推送到 `main`，GitHub Actions 会自动打包并创建对应的 Release。
 
 ## 使用须知
 
