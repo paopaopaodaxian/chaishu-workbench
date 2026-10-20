@@ -30,6 +30,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: 清理之前试跑留下的草稿版本
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 50 --json tagName,isDraft --jq '.[] | select(.isDraft and (.tagName | startswith("test-"))) | .tagName' \
+            | while read -r t; do gh release delete "$t" --yes || true; done
+
       - name: 需要时删除已有的同版本发布
         if: github.event_name == 'workflow_dispatch' && inputs.republish && !inputs.dry_run
         env:
@@ -76,14 +84,46 @@ jobs:
         if: steps.ver.outputs.exists == 'false'
         run: scripts/build_source_zip.sh "${{ steps.ver.outputs.version }}"
 
-      - name: 上传试跑产物
+      - name: 验证 dmg 内容并实际启动应用
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          set -x
+          v="${{ steps.ver.outputs.version }}"
+          dmg="dist/ChaiShu-$v-macOS.dmg"
+          mnt="$(hdiutil attach -nobrowse -readonly "$dmg" | tail -1 | cut -f3)"
+          ls -la "$mnt" "$mnt/.background" || true
+          test -L "$mnt/Applications"
+          test -f "$mnt/.DS_Store"
+          test -x "$mnt/拆书工作台.app/Contents/MacOS/launcher"
+          echo "::notice title=dmg 内容::$(ls -A "$mnt" | tr '\n' ' ')"
+          ditto "$mnt/拆书工作台.app" "/Applications/拆书工作台.app"
+          hdiutil detach "$mnt"
+          # 像用户一样打开 dmg 窗口并截图
+          open "$dmg"; sleep 6
+          screencapture -x dist/dmg-window.png || true
+          # 实际启动应用，确认服务和页面正常
+          open "/Applications/拆书工作台.app"
+          for i in $(seq 1 60); do curl -s -m 2 http://127.0.0.1:8765/api/ping && break; sleep 1; done
+          ping="$(curl -s -m 3 http://127.0.0.1:8765/api/ping)"
+          page="$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/)"
+          echo "::notice title=启动结果::ping=$ping page=$page"
+          test "$page" = "200"
+          echo "$ping" | grep -q "\"version\": \"$v\""
+          [ "$(uname -m)" != "arm64" ] || echo "$ping" | grep -q '"arch": "arm64"'
+          curl -s -m 3 -X POST -d '{}' http://127.0.0.1:8765/api/shutdown || true
+
+      - name: 试跑产物放进草稿版本（仅仓库主人可见）
         if: steps.ver.outputs.exists == 'false' && inputs.dry_run
-        uses: actions/upload-artifact@v4
+        uses: softprops/action-gh-release@v2
         with:
-          name: chaishu-${{ steps.ver.outputs.version }}
-          path: |
-            dist/*.dmg
+          tag_name: test-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: 试跑 ${{ github.run_number }}（草稿，可删除）
+          draft: true
+          files: |
+            dist/ChaiShu-${{ steps.ver.outputs.version }}-macOS.dmg
             dist/ChaiShu-${{ steps.ver.outputs.version }}.zip
+            dist/dmg-window.png
 
       - name: 发布
         if: steps.ver.outputs.exists == 'false' && !inputs.dry_run
