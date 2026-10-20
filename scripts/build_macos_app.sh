@@ -9,6 +9,7 @@ VERSION="${VERSION#v}"
 APP="dist/拆书工作台.app"
 rm -rf dist && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/app"
 cp -R server.py core static README.md LICENSE "$APP/Contents/Resources/app/"
+echo "$VERSION" > "$APP/Contents/Resources/app/VERSION"
 find "$APP" -name __pycache__ -prune -exec rm -rf {} +
 cp macos/launcher "$APP/Contents/MacOS/launcher" && chmod 755 "$APP/Contents/MacOS/launcher"
 cp macos/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"

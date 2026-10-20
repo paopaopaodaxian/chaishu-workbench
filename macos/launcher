@@ -8,7 +8,7 @@ if [ "$(uname -m)" = "x86_64" ] && [ "$(/usr/sbin/sysctl -n hw.optional.arm64 2>
   exec /usr/bin/arch -arm64 /bin/bash "$0" "$@"
 fi
 
-RES="$(cd "$(dirname "$0")/../Resources" && pwd)"
+RES="$(cd "$(dirname "$0")/../Resources" && pwd -P)"
 SUPPORT="$HOME/Library/Application Support/拆书工作台"
 DATA="$SUPPORT/data"
 LOG="$SUPPORT/server.log"
@@ -21,9 +21,20 @@ alert() {
   /usr/bin/osascript -e "display alert \"$1\" message \"$msg\" as critical" >/dev/null 2>&1
 }
 running() { /usr/bin/curl -s -m 2 "$URL/api/overview" 2>/dev/null | grep -q '"engines"'; }
+APP_ROOT="$RES/app"
 
-# 已经在运行：直接打开页面
-if running; then open "$URL"; exit 0; fi
+# 已经在运行：如果是当前这个应用启动的，直接打开页面；
+# 如果是旧版本或其他位置的工作台（比如升级前没关的那个），先关掉它再启动当前版本
+if running; then
+  PING="$(/usr/bin/curl -s -m 2 "$URL/api/ping" 2>/dev/null)"
+  RUNNING_ROOT="$(printf '%s' "$PING" | sed -n 's/.*"root": *"\([^"]*\)".*/\1/p')"
+  if [ "$RUNNING_ROOT" = "$APP_ROOT" ] && [ -f "$APP_ROOT/server.py" ]; then
+    open "$URL"; exit 0
+  fi
+  echo "$(date) 发现其他版本的工作台在运行（${RUNNING_ROOT:-旧版本}），关闭后重新启动" >>"$LOG"
+  /usr/bin/curl -s -m 3 -X POST -d '{}' "$URL/api/shutdown" >/dev/null 2>&1
+  for _ in $(seq 1 20); do sleep 0.25; running || break; done
+fi
 
 if /usr/sbin/lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   alert "无法启动拆书工作台" "端口 $PORT 被其他程序占用。如果之前在终端里启动过工作台，请先在那个终端按 Ctrl+C 关闭它，再双击打开。"
@@ -43,7 +54,7 @@ fi
 
 echo "==== $(date) 启动（$PY，$(uname -m)）" >>"$LOG"
 export NOVEL_DATA="$DATA" PORT
-nohup "$PY" "$RES/app/server.py" >>"$LOG" 2>&1 </dev/null &
+nohup "$PY" "$APP_ROOT/server.py" >>"$LOG" 2>&1 </dev/null &
 disown
 
 for _ in $(seq 1 60); do

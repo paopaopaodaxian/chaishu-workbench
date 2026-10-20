@@ -56,7 +56,9 @@ _engine_cache = {"t": 0, "data": None}
 @route("GET", "/api/ping")
 def ping(req):
     import platform
-    return {"app": "chaishu", "pid": os.getpid(), "arch": platform.machine(), "python": sys.version.split()[0]}
+    ver = (Path(__file__).resolve().parent / "VERSION")
+    return {"app": "chaishu", "pid": os.getpid(), "arch": platform.machine(), "python": sys.version.split()[0],
+            "root": str(Path(__file__).resolve().parent), "version": ver.read_text().strip() if ver.exists() else ""}
 
 
 @route("POST", "/api/shutdown")
@@ -757,7 +759,14 @@ class Handler(BaseHTTPRequestHandler):
             f = STATIC / "index.html"
         ctype = {"html": "text/html", "js": "text/javascript", "css": "text/css", "svg": "image/svg+xml"}.get(
             f.suffix.lstrip("."), "application/octet-stream")
-        self.send_body(200, f.read_bytes(), ctype + "; charset=utf-8")
+        try:
+            body = f.read_bytes()
+        except OSError:
+            # 程序文件被移走或替换（例如升级时旧版服务还在运行）
+            msg = ("拆书工作台的程序文件找不到了，可能是升级时旧版本还在后台运行。"
+                   "请重新双击「拆书工作台」，它会自动关闭旧版本并启动新版本。")
+            return self.send_body(500, msg.encode("utf-8"), "text/plain; charset=utf-8")
+        self.send_body(200, body, ctype + "; charset=utf-8")
 
     def do_GET(self):
         self.handle_any("GET")
