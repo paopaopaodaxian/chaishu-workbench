@@ -13,5 +13,19 @@ find "$APP" -name __pycache__ -prune -exec rm -rf {} +
 cp macos/launcher "$APP/Contents/MacOS/launcher" && chmod 755 "$APP/Contents/MacOS/launcher"
 cp macos/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 sed "s/__VERSION__/$VERSION/g" macos/Info.plist > "$APP/Contents/Info.plist"
-(cd dist && zip -qry "ChaiShu-$VERSION-macOS.zip" "拆书工作台.app")
+# 用 Python 打 zip：文件名一律按 UTF-8 写入并保留可执行权限，不受打包机器语言环境影响
+python3 - "$VERSION" <<'PY'
+import os, sys, zipfile
+out = f"dist/ChaiShu-{sys.argv[1]}-macOS.zip"
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk("dist/拆书工作台.app"):
+        dirs.sort()
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            arc = os.path.relpath(path, "dist")
+            info = zipfile.ZipInfo.from_file(path, arc)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            with open(path, "rb") as f:
+                z.writestr(info, f.read())
+PY
 echo "已生成 dist/ChaiShu-$VERSION-macOS.zip"
