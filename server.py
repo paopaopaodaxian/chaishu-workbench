@@ -58,7 +58,8 @@ def ping(req):
     import platform
     ver = (Path(__file__).resolve().parent / "VERSION")
     return {"app": "chaishu", "pid": os.getpid(), "arch": platform.machine(), "python": sys.version.split()[0],
-            "root": str(Path(__file__).resolve().parent), "version": ver.read_text().strip() if ver.exists() else ""}
+            "root": str(Path(__file__).resolve().parent),
+            "version": os.environ.get("CHAISHU_VERSION") or (ver.read_text().strip() if ver.exists() else "")}
 
 
 @route("POST", "/api/shutdown")

@@ -23,15 +23,17 @@ alert() {
 running() { /usr/bin/curl -s -m 2 "$URL/api/overview" 2>/dev/null | grep -q '"engines"'; }
 APP_ROOT="$RES/app"
 
-# 已经在运行：如果是当前这个应用启动的，直接打开页面；
-# 如果是旧版本或其他位置的工作台（比如升级前没关的那个），先关掉它再启动当前版本
+# 已经在运行：版本一致且页面正常，就直接打开；
+# 版本不同（升级后）或页面打不开（旧版本的程序文件已被删除），先关掉它再启动当前版本。
+# 不按路径比较：macOS 会把刚下载的应用放到随机的临时路径运行，同一个应用每次路径都可能不同。
 if running; then
-  PING="$(/usr/bin/curl -s -m 2 "$URL/api/ping" 2>/dev/null)"
-  RUNNING_ROOT="$(printf '%s' "$PING" | sed -n 's/.*"root": *"\([^"]*\)".*/\1/p')"
-  if [ "$RUNNING_ROOT" = "$APP_ROOT" ] && [ -f "$APP_ROOT/server.py" ]; then
+  MY_VERSION="$(cat "$APP_ROOT/VERSION" 2>/dev/null)"
+  RUNNING_VERSION="$(/usr/bin/curl -s -m 2 "$URL/api/ping" 2>/dev/null | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')"
+  PAGE_OK="$(/usr/bin/curl -s -m 3 -o /dev/null -w '%{http_code}' "$URL/" 2>/dev/null)"
+  if [ "$PAGE_OK" = "200" ] && [ -n "$MY_VERSION" ] && [ "$RUNNING_VERSION" = "$MY_VERSION" ]; then
     open "$URL"; exit 0
   fi
-  echo "$(date) 发现其他版本的工作台在运行（${RUNNING_ROOT:-旧版本}），关闭后重新启动" >>"$LOG"
+  echo "$(date) 后台工作台版本为「${RUNNING_VERSION:-旧版本}」、页面状态 $PAGE_OK，当前应用版本 $MY_VERSION，关闭后重新启动" >>"$LOG"
   /usr/bin/curl -s -m 3 -X POST -d '{}' "$URL/api/shutdown" >/dev/null 2>&1
   for _ in $(seq 1 20); do sleep 0.25; running || break; done
 fi
@@ -53,7 +55,7 @@ if [ -z "$PY" ] || ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3,
 fi
 
 echo "==== $(date) 启动（$PY，$(uname -m)）" >>"$LOG"
-export NOVEL_DATA="$DATA" PORT
+export NOVEL_DATA="$DATA" PORT CHAISHU_VERSION="$(cat "$APP_ROOT/VERSION" 2>/dev/null)"
 nohup "$PY" "$APP_ROOT/server.py" >>"$LOG" 2>&1 </dev/null &
 disown
 
