@@ -263,7 +263,7 @@ class Engine:
     def _spawn(self, cmd, prompt, register, timeout, cwd):
         p = subprocess.Popen(cmd, cwd=cwd, env=self.env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-                             start_new_session=True)
+                             **NEW_GROUP)
         register(p)
         try:
             out, err = p.communicate(prompt, timeout=timeout)
@@ -278,20 +278,34 @@ class Engine:
         return p.returncode, out or "", err or ""
 
 
+# 让 CLI 进程单独成组，取消时可以连同它的子进程一起中断
+NEW_GROUP = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+             else {"start_new_session": True})
+
+
 def interrupt(p: subprocess.Popen):
-    """官方中断方式：先发 SIGINT，5 秒不退出再强制结束。"""
+    """官方中断方式：先发 SIGINT（Windows 上发 CTRL_BREAK），5 秒不退出再强制结束。"""
     if not p or p.poll() is not None:
         return
     p._cancelled = True  # type: ignore[attr-defined]
     try:
-        os.killpg(p.pid, signal.SIGINT)
+        if os.name == "nt":
+            p.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            os.killpg(p.pid, signal.SIGINT)
     except Exception:  # noqa: BLE001
-        p.send_signal(signal.SIGINT)
+        try:
+            p.terminate()
+        except Exception:  # noqa: BLE001
+            pass
     try:
         p.wait(timeout=5)
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(p.pid, signal.SIGKILL)
+            if os.name == "nt":
+                p.kill()
+            else:
+                os.killpg(p.pid, signal.SIGKILL)
         except Exception:  # noqa: BLE001
             p.kill()
 

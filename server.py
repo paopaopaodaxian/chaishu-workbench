@@ -776,18 +776,43 @@ class Handler(BaseHTTPRequestHandler):
         self.handle_any("POST")
 
 
+def already_running() -> bool:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/ping", timeout=2) as r:
+            return json.loads(r.read().decode("utf-8")).get("app") == "chaishu"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
+    url = f"http://{HOST}:{PORT}"
+    open_browser = os.environ.get("CHAISHU_OPEN_BROWSER") == "1"
+    try:
+        srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError:
+        if already_running():
+            print(f"拆书工作台已经在运行：{url}")
+            if open_browser:
+                import webbrowser
+                webbrowser.open(url)
+            return
+        print(f"端口 {PORT} 被其他程序占用，可以换一个端口再试，例如：PORT=8800 python3 server.py")
+        sys.exit(1)
+    srv.daemon_threads = True
     db.init()
     templates.ensure_builtin()
     worker.recover()
     worker.start()
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
-    srv.daemon_threads = True
-    print(f"拆书工作台已启动：http://{HOST}:{PORT}")
+    print(f"拆书工作台已启动：{url}")
     print(f"数据目录：{db.DATA_DIR}")
     for k, e in engines.ENGINES.items():
         p = e.bin()
         print(f"  {e.label:12s} {'已安装 ' + p if p else '未检测到'}")
+    if open_browser:
+        import webbrowser
+        threading.Timer(0.8, webbrowser.open, [url]).start()
+        print("关闭这个窗口就会停止工作台。")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

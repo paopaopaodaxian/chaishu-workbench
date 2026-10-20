@@ -1,6 +1,8 @@
 name: 发布
 
-# 修改 VERSION 文件并推送到 main 后，自动打包 macOS 应用，创建 v<版本号> 标签和 Release。
+# 修改 VERSION 并推送到 main 后，在 macOS 上打包并发布：
+#   ChaiShu-<版本>-macOS.dmg  Mac 用户下载这个
+#   ChaiShu-<版本>.zip        Windows / Linux（从源码运行）
 # 版本号已经发布过时会跳过。也可以在 Actions 页面手动运行。
 on:
   push:
@@ -12,20 +14,24 @@ on:
         description: "重新发布当前版本（删除已有的同版本 Release 和标签后重建）"
         type: boolean
         default: false
+      dry_run:
+        description: "只打包、不发布（产物在本次运行的 Artifacts 里）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: 需要时删除已有的同版本发布
-        if: github.event_name == 'workflow_dispatch' && inputs.republish
+        if: github.event_name == 'workflow_dispatch' && inputs.republish && !inputs.dry_run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -38,7 +44,7 @@ jobs:
         run: |
           v="$(tr -d ' \n' < VERSION)"
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          if git rev-parse "v$v" >/dev/null 2>&1; then
+          if git rev-parse "v$v" >/dev/null 2>&1 && [ "${{ inputs.dry_run }}" != "true" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "v$v 已经发布过，跳过"
           else
@@ -51,18 +57,46 @@ jobs:
           python3 -m py_compile server.py core/*.py
           bash -n macos/launcher
 
-      - name: 打包
+      - name: 打包 Mac 应用
         if: steps.ver.outputs.exists == 'false'
         run: scripts/build_macos_app.sh "${{ steps.ver.outputs.version }}"
 
-      - name: 发布
+      - name: 制作 dmg
         if: steps.ver.outputs.exists == 'false'
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          python3 -m venv .venv && .venv/bin/pip install --quiet dmgbuild
+          tiffutil -cathidpicheck macos/dmg-background.png macos/dmg-background@2x.png -out dist/dmg-background.tiff
+          .venv/bin/dmgbuild -s macos/dmg_settings.py \
+            -D app="dist/拆书工作台.app" -D background=dist/dmg-background.tiff \
+            "拆书工作台" "dist/ChaiShu-$v-macOS.dmg"
+          hdiutil verify "dist/ChaiShu-$v-macOS.dmg"
+
+      - name: 打包通用版 zip
+        if: steps.ver.outputs.exists == 'false'
+        run: scripts/build_source_zip.sh "${{ steps.ver.outputs.version }}"
+
+      - name: 上传试跑产物
+        if: steps.ver.outputs.exists == 'false' && inputs.dry_run
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaishu-${{ steps.ver.outputs.version }}
+          path: |
+            dist/*.dmg
+            dist/ChaiShu-${{ steps.ver.outputs.version }}.zip
+
+      - name: 发布
+        if: steps.ver.outputs.exists == 'false' && !inputs.dry_run
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           target_commitish: ${{ github.sha }}
           name: 拆书工作台 v${{ steps.ver.outputs.version }}
-          files: dist/*.zip
+          files: |
+            dist/ChaiShu-${{ steps.ver.outputs.version }}-macOS.dmg
+            dist/ChaiShu-${{ steps.ver.outputs.version }}.zip
           body: |
-            下载 `ChaiShu-${{ steps.ver.outputs.version }}-macOS.zip`，解压后把「拆书工作台」拖进「应用程序」。第一次打开会被拦，见 README 的安装部分。
+            **Mac**：下载 `ChaiShu-${{ steps.ver.outputs.version }}-macOS.dmg`，打开后把「拆书工作台」拖进「应用程序」。第一次打开会被拦，见 README 的安装部分。
+
+            **Windows / Linux**：下载 `ChaiShu-${{ steps.ver.outputs.version }}.zip`，解压后 Windows 双击 `start-windows.bat`，Linux 运行 `start.sh`。需要 Python 3.9+。
           generate_release_notes: true

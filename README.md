@@ -22,21 +22,31 @@
 
 ## 需要什么
 
-- 一台 Mac
+- 一台 Mac（Windows、Linux 也能用，见下面的安装）
 - Claude Code 或 Codex 至少装一个并登录好，在终端里输 `claude` 或 `codex` 能用就行
-- Python 3。Mac 一般自带，没有的话在终端运行 `xcode-select --install`
+- Python 3.9 或以上。Mac 一般自带，没有的话在终端运行 `xcode-select --install`
 
 用的是你自己的账号和额度，这个工具不碰你的账号密码。
 
 ## 安装
 
-1. 在右边 Releases 里下载 `ChaiShu-x.x.x-macOS.zip`，解压后得到「拆书工作台」，拖进「应用程序」。
+**Mac**
+
+1. 在右边 Releases 里下载 `ChaiShu-x.x.x-macOS.dmg`，双击打开，把「拆书工作台」拖到旁边的「应用程序」文件夹里。
 2. 第一次打开会被 macOS 拦住，因为这个应用没有花钱找苹果签名。先双击一次，然后去「系统设置 → 隐私与安全性」，往下翻找到拆书工作台，点「仍要打开」。只需要弄这一次。
-3. 之后双击就会在浏览器里打开。用完点左下角的「关闭工作台」。
+3. 之后从「应用程序」里双击就会在浏览器里打开。用完点左下角的「关闭工作台」。
+
+升级时下载新的 dmg，拖进去替换旧的就行，书库数据不受影响。
+
+**Windows / Linux**
+
+下载 `ChaiShu-x.x.x.zip` 并解压。Windows 双击 `start-windows.bat`，Linux 在终端运行 `./start.sh`，浏览器会自动打开。需要先装好 Python 3.9 或以上。命令行窗口别关，关了工作台就停了。
+
+Windows 版我手上没有机器测过，遇到问题欢迎提 Issue。
 
 ## 数据放在哪
 
-所有东西都在你自己电脑的 `~/Library/Application Support/拆书工作台/` 里，运行日志也在这个目录下（`server.log`）。
+Mac 应用的数据在 `~/Library/Application Support/拆书工作台/` 里，运行日志也在这个目录下（`server.log`）。用 zip 版的话，数据在解压出来的文件夹里的 `data/` 下。
 
 只有点了「开始分析」，选中的那几章正文才会发给 Anthropic 或 OpenAI。设置里可以一键备份整个书库。
 
@@ -48,8 +58,6 @@
 
 **任务卡在「等待额度」**：额度用完了，等额度恢复后回来点「继续」。
 
-**Windows / Linux**：没有打包好的版本，可以下载源码后运行 `python3 server.py`，再打开 http://127.0.0.1:8765 。不需要装任何依赖。
-
 ## 说明
 
 - 请只拆你有权使用的文本，别把带大段原文的报告公开发出去。
@@ -59,6 +67,6 @@
 
 纯 Python 标准库加原生 JS，没有依赖。`core/` 是后端：`engines.py` 负责调用两个 CLI，`analysis.py` 是提示词和段落校验，`worker.py` 是任务队列。`static/` 是页面。
 
-`scripts/build_macos_app.sh` 打包 Mac 应用。改 `VERSION` 里的版本号并推到 main，GitHub Actions 会自动打包发布。
+改 `VERSION` 里的版本号并推到 main，GitHub Actions 会在 Mac 机器上打包出 dmg 和通用 zip 并发布。打包脚本在 `scripts/`，dmg 的窗口布局在 `macos/dmg_settings.py`。
 
 MIT 协议。
