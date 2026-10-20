@@ -64,10 +64,5 @@ jobs:
           name: 拆书工作台 v${{ steps.ver.outputs.version }}
           files: dist/*.zip
           body: |
-            ## 下载
-
-            下载下方的 `ChaiShu-${{ steps.ver.outputs.version }}-macOS.zip`，解压后把「拆书工作台」拖进「应用程序」。
-            第一次打开的方法见 README 的「安装」部分。
-
-            需要：macOS（Apple 芯片或 Intel）、已安装并登录 Claude Code 或 Codex CLI、Python 3.9+。
+            下载 `ChaiShu-${{ steps.ver.outputs.version }}-macOS.zip`，解压后把「拆书工作台」拖进「应用程序」。第一次打开会被拦，见 README 的安装部分。
           generate_release_notes: true
