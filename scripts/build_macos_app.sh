@@ -1,0 +1,16 @@
+#!/bin/bash
+# 打包 macOS 应用：生成 dist/拆书工作台.app 和 dist/拆书工作台-<版本>-macOS.zip
+# 用法：scripts/build_macos_app.sh [版本号]      （不依赖 macOS，Linux 上也能打包）
+set -euo pipefail
+cd "$(dirname "$0")/.."
+VERSION="${1:-$(cat VERSION)}"
+VERSION="${VERSION#v}"
+APP="dist/拆书工作台.app"
+rm -rf dist && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/app"
+cp -R server.py core static README.md LICENSE "$APP/Contents/Resources/app/"
+find "$APP" -name __pycache__ -prune -exec rm -rf {} +
+cp macos/launcher "$APP/Contents/MacOS/launcher" && chmod 755 "$APP/Contents/MacOS/launcher"
+cp macos/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+sed "s/__VERSION__/$VERSION/g" macos/Info.plist > "$APP/Contents/Info.plist"
+(cd dist && zip -qry "拆书工作台-$VERSION-macOS.zip" "拆书工作台.app")
+echo "已生成 dist/拆书工作台-$VERSION-macOS.zip"

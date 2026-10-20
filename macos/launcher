@@ -1,0 +1,56 @@
+#!/bin/bash
+# 拆书工作台启动器：在后台启动本地服务，然后用默认浏览器打开页面。
+
+# 以脚本为入口的 App 在 Apple 芯片上可能被当成 Intel 程序经 Rosetta 运行，
+# 子进程（node、codex 等）也会跟着用 Intel 架构，导致找不到 Apple 芯片版组件。这里切回原生架构。
+if [ "$(uname -m)" = "x86_64" ] && [ "$(/usr/sbin/sysctl -n hw.optional.arm64 2>/dev/null)" = "1" ] && [ -z "$CHAISHU_ARCH_FIXED" ]; then
+  export CHAISHU_ARCH_FIXED=1
+  exec /usr/bin/arch -arm64 /bin/bash "$0" "$@"
+fi
+
+RES="$(cd "$(dirname "$0")/../Resources" && pwd)"
+SUPPORT="$HOME/Library/Application Support/拆书工作台"
+DATA="$SUPPORT/data"
+LOG="$SUPPORT/server.log"
+PORT="${CHAISHU_PORT:-8765}"
+URL="http://127.0.0.1:$PORT"
+mkdir -p "$SUPPORT"
+
+alert() {
+  local msg="${2//\"/\'}"; msg="${msg//\\/}"
+  /usr/bin/osascript -e "display alert \"$1\" message \"$msg\" as critical" >/dev/null 2>&1
+}
+running() { /usr/bin/curl -s -m 2 "$URL/api/overview" 2>/dev/null | grep -q '"engines"'; }
+
+# 已经在运行：直接打开页面
+if running; then open "$URL"; exit 0; fi
+
+if /usr/sbin/lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  alert "无法启动拆书工作台" "端口 $PORT 被其他程序占用。如果之前在终端里启动过工作台，请先在那个终端按 Ctrl+C 关闭它，再双击打开。"
+  exit 1
+fi
+
+# 双击启动的程序拿不到终端里的 PATH，这里从登录 shell 读取，保证能找到 claude / codex / node / python3
+SHELL_PATH="$(/usr/bin/perl -e 'alarm 8; exec @ARGV' /bin/zsh -ilc 'printf "__P__%s\n" "$PATH"' </dev/null 2>/dev/null | grep '^__P__' | tail -1 | sed 's/^__P__//')"
+NVM_BIN="$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
+export PATH="${SHELL_PATH:+$SHELL_PATH:}$HOME/.local/bin:$HOME/.npm-global/bin:${NVM_BIN:+$NVM_BIN:}$HOME/.volta/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+PY="$(command -v python3)"
+if [ -z "$PY" ] || ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+  alert "未找到可用的 Python" "拆书工作台需要 Python 3.9 或更高版本。请在「终端」运行 xcode-select --install 安装命令行工具后再试。"
+  exit 1
+fi
+
+echo "==== $(date) 启动（$PY，$(uname -m)）" >>"$LOG"
+export NOVEL_DATA="$DATA" PORT
+nohup "$PY" "$RES/app/server.py" >>"$LOG" 2>&1 </dev/null &
+disown
+
+for _ in $(seq 1 60); do
+  sleep 0.25
+  if running; then open "$URL"; exit 0; fi
+done
+alert "拆书工作台启动失败" "$(tail -6 "$LOG")
+
+完整日志：$LOG"
+exit 1

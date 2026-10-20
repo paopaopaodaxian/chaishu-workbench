@@ -1,0 +1,28 @@
+name: 发布
+
+# 推送形如 v0.1.2 的标签时，自动打包 macOS 应用并发布到 Releases
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 语法检查
+        run: |
+          python3 -m py_compile server.py core/*.py
+          bash -n macos/launcher
+      - name: 打包
+        run: scripts/build_macos_app.sh "${GITHUB_REF_NAME}"
+      - name: 发布
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
