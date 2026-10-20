@@ -11,7 +11,6 @@
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>10.15</string>
-  <key>LSArchitecturePriority</key><array><string>arm64</string><string>x86_64</string></array>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
